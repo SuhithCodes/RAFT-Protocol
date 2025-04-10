@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package raft;
+
+service RaftService {
+    rpc RequestVote (RequestVoteRequest) returns (RequestVoteResponse) {}
+    rpc AppendEntries (AppendEntriesRequest) returns (AppendEntriesResponse) {}
+    rpc SubmitOperation (OperationRequest) returns (OperationResponse) {}
+    rpc ForwardToLeader (OperationRequest) returns (OperationResponse) {}
+    rpc Add (AddRequest) returns (AddResponse) {}
+    rpc JoinCluster (JoinRequest) returns (JoinResponse) {}
+}
+
+message LogEntry {
+    int32 term = 1;
+    string command = 2;
+    int32 index = 3;
+    ConfigChange config_change = 4;
+}
+
+message RequestVoteRequest {
+    int32 term = 1;
+    int32 candidate_id = 2;
+    int32 last_log_index = 3;
+    int32 last_log_term = 4;
+}
+
+message RequestVoteResponse {
+    int32 term = 1;
+    bool vote_granted = 2;
+}
+
+message AppendEntriesRequest {
+    int32 term = 1;
+    int32 leader_id = 2;
+    int32 prev_log_index = 3;
+    int32 prev_log_term = 4;
+    repeated LogEntry entries = 5;
+    int32 leader_commit = 6;
+}
+
+message AppendEntriesResponse {
+    int32 term = 1;
+    bool success = 2;
+}
+
+message OperationRequest {
+    string operation = 1;
+    int32 client_id = 2;
+}
+
+message OperationResponse {
+    bool success = 1;
+    string result = 2;
+    int32 leader_id = 3;
+}
+
+message AddRequest {
+    int32 num1 = 1;
+    int32 num2 = 2;
+}
+
+message AddResponse {
+    int32 sum = 1;
+    bool success = 2;
+    string error = 3;
+}
+
+message JoinRequest {
+    int32 node_id = 1;
+    string address = 2;
+}
+
+message JoinResponse {
+    bool success = 1;
+    string error = 2;
+    ClusterConfig cluster_config = 3;
+    int32 current_term = 4;
+    int32 log_index = 5;
+    int32 current_leader = 6;
+}
+
+message ConfigChange {
+    ClusterConfig old_config = 1;
+    ClusterConfig new_config = 2;
+    int32 node_id = 3;
+}
+
+message ClusterConfig {
+    repeated int32 nodes = 1;
+    int32 version = 2;
+} 
