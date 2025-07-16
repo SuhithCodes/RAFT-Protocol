@@ -1,174 +1,148 @@
 # RAFT Protocol Implementation
 
-This is a simplified implementation of the RAFT consensus protocol in Python. RAFT is a protocol that helps multiple computers (nodes) agree on a single value or state, even if some of them fail or have network issues.
+A cross-language (Python & Node.js) implementation of the RAFT consensus protocol for distributed systems. RAFT enables a cluster of nodes to agree on a replicated log, ensuring consistency and fault tolerance even in the presence of node failures or network partitions.
 
-## What is RAFT?
+## Table of Contents
 
-Imagine you have a group of friends trying to decide where to eat. RAFT is like a democratic system where:
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Overview](#project-overview)
+- [Tags](#tags)
+- [Implementation Notes](#implementation-notes)
+- [Deployment Notes](#deployment-notes)
+- [Test Cases](#test-cases)
+- [Future Improvements](#future-improvements)
 
-1. One person becomes the "leader" (elected by the group)
-2. The leader makes decisions and shares them with others
-3. If the leader disappears, a new leader is elected
-4. Everyone keeps track of what decisions have been made
+## Features
 
-## How It Works
+- **Leader Election**: Automatic leader selection with randomized election timeouts.
+- **Log Replication**: Consistent replication of client operations across all nodes.
+- **Dynamic Cluster Membership**: Nodes can join the cluster at runtime.
+- **Client Operations**: Supports distributed addition operations with leader forwarding and retry logic.
+- **State Management**: Persistent and volatile state tracking (term, votedFor, logs, commit index, etc.).
+- **gRPC API**: All node-to-node and client-to-node communication via gRPC.
+- **Detailed Logging**: Rich, timestamped logs for all major events and state transitions.
+- **Error Handling**: Robust handling of network failures, node crashes, leader changes, and split votes.
+- **Test Suite**: Markdown-based test cases for leader election, node joining, failure recovery, and client operations.
+- **Multi-language Support**: Both Python and Node.js implementations for educational and interoperability purposes.
+- **Dockerized Deployment**: Ready-to-use Dockerfiles and docker-compose for local cluster setup and testing.
 
-### States
+## Tech Stack
 
-Each node can be in one of three states:
+- **Languages**: Python 3.9+, Node.js 16+
+- **RPC Framework**: gRPC (with Protocol Buffers)
+- **Python Libraries**:
+  - `grpcio`, `grpcio-tools`, `protobuf`, `asyncio`
+- **Node.js Libraries**:
+  - `@grpc/grpc-js`, `@grpc/proto-loader`, `winston`, `async`
+- **Containerization**: Docker, Docker Compose
 
-- **Follower**: Waits for instructions from the leader
-- **Candidate**: Trying to become the leader
-- **Leader**: Makes decisions and tells others what to do
+## Project Overview
 
-### Election Process
+This project implements the RAFT consensus protocol, which is used to manage a replicated log across a distributed cluster. The protocol ensures that:
 
-1. If a follower doesn't hear from the leader for 20-30 seconds (random time), it becomes a candidate
-2. The candidate asks others to vote for it
-3. If it gets votes from most nodes, it becomes the leader
-4. If not, it goes back to being a follower
+- Only one node acts as the leader at any time.
+- All client operations are replicated and committed in the same order on all nodes.
+- The system can tolerate node failures and recover gracefully.
 
-### Heartbeats
+**Key Concepts:**
+- **States**: Follower, Candidate, Leader
+- **RPCs**: RequestVote, AppendEntries, JoinCluster, Add, SubmitOperation, ForwardToLeader
+- **Timeouts**: Election (20-30s), Heartbeat (6s)
+- **Cluster Membership**: Nodes can join dynamically; leader updates configuration.
 
-- The leader sends "heartbeats" every 6 seconds
-- If followers don't get heartbeats, they start a new election
+## Tags
 
-### Log Replication
+`raft` `consensus` `distributed-systems` `replication` `gRPC` `python` `nodejs` `docker` `fault-tolerance` `leader-election` `log-replication` `cluster` `asyncio`
 
-- When a client wants to perform an operation (e.g., addition), it tells any node
-- If the node is not the leader, it redirects to the current leader
-- The leader adds the operation to its log and tells followers
-- Once most followers have it, the operation is "committed" and executed
+## Implementation Notes
 
-## Implementation Details
+- **State Management**: Each node tracks persistent (term, votedFor, log, config) and volatile (commit index, last applied, leader ID, etc.) state.
+- **Leader Election**: Randomized timeouts prevent split votes; nodes vote for candidates with up-to-date logs.
+- **Log Consistency**: AppendEntries RPC ensures logs are consistent; followers reject inconsistent entries.
+- **Dynamic Membership**: JoinCluster RPC allows new nodes to join; leader updates and replicates new config.
+- **Client Handling**: Clients can connect to any node; non-leaders forward requests to the current leader.
+- **Error Handling**: Retries, leader redirection, and robust logging for all error scenarios.
+- **Testing**: Markdown test cases and a dedicated test Dockerfile for automated cluster tests.
 
-### Timeouts
+## Deployment Notes
 
-- **Election Timeout**: 20-30 seconds (random for each node)
-- **Heartbeat Timeout**: 6.0 seconds
+### Prerequisites
 
-### RPC Methods
+- Docker & Docker Compose installed
+- Python 3.9+ and/or Node.js 16+ (for manual runs)
 
-1. **RequestVote**: Used during elections
+### Quick Start (Docker Compose)
 
-   - Candidates ask for votes
-   - Followers decide whether to vote
+1. **Build and Start Cluster:**
+   ```bash
+   docker-compose up --build
+   ```
+   This will start 5 RAFT nodes and a test node.
 
-2. **AppendEntries**: Used for:
+2. **Run Client Operations:**
+   ```bash
+   docker exec -it <node_container> python client.py 5 3
+   ```
 
-   - Heartbeats (empty messages)
-   - Log replication (with actual data)
+3. **Logs:**
+   - View logs with `docker-compose logs -f node1` (or any node).
 
-3. **JoinCluster**: Used for dynamic membership
+### Manual (Python)
 
-   - New nodes can join an existing cluster
-   - Leader updates cluster configuration
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. raft.proto
+   ```
 
-4. **Add**: Handles addition operations
-   - If received by leader: processes the addition
-   - If received by follower: redirects to leader with hint
+2. **Start a node:**
+   ```bash
+   NODE_ID=1 PEER_IDS=2,3,4,5 python node.py
+   ```
 
-### Client Implementation
+3. **Run the client:**
+   ```bash
+   python client.py 5 3
+   ```
 
-The client (`client.py`) provides:
+### Manual (Node.js)
 
-- Connection to multiple nodes
-- Automatic leader discovery
-- Operation retry logic
-- Detailed operation status:
-  - Leader identification
-  - Operation node tracking
-  - Result reporting
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-Example client usage:
-
-```bash
-python client.py 5 3
-
-Operation Summary:
-Leader: Node 1
-Operation performed on: Node 1
-Result: 5 + 3 = 8
-```
-
-### Log Management
-
-- Each node maintains a log of operations
-- Log entries contain:
-  - Term number
-  - Operation details (e.g., Add request)
-  - Index (position in log)
-  - Configuration changes (for cluster membership)
-
-### State Management
-
-- **Persistent State**:
-
-  - Current term
-  - Voted for
-  - Log entries
-  - Cluster configuration
-
-- **Volatile State**:
-  - Commit index
-  - Last applied
-  - Leader ID
-  - Election attempts
-  - Heartbeats sent
+2. **Start a node:**
+   ```bash
+   NODE_ID=1 PEER_IDS=2,3,4,5 node node.js
+   ```
 
 ## Test Cases
 
-The system includes several test cases:
+- **Leader Election**: Verifies correct leader selection and state transitions.
+- **Leader Failure and Recovery**: Ensures new leader is elected and cluster remains consistent.
+- **New Node Joining**: Tests dynamic membership and log catch-up.
+- **Follower Catch-up**: Verifies log synchronization after downtime.
+- **Client Operations**: Tests distributed addition, leader forwarding, and retry logic.
 
-1. **Leader Election**
-
-   - Verifies correct leader selection
-   - Checks term consistency
-   - Monitors state transitions
-
-2. **New Node Joining**
-
-   - Tests dynamic cluster membership
-   - Verifies configuration updates
-   - Checks log replication to new nodes
-
-3. **Follower Catch-up**
-
-   - Tests node recovery after downtime
-   - Verifies log synchronization
-   - Checks entry application order
-
-4. **Client Operations**
-   - Tests addition operations
-   - Verifies leader forwarding
-   - Checks operation consistency
-
-## Logging
-
-The system provides detailed logging:
-
-```
-[YYYY-MM-DD HH:mm:ss,SSS] - INFO - Node X started on port 50051
-[YYYY-MM-DD HH:mm:ss,SSS] - INFO - Node X election timeout, becoming candidate
-[YYYY-MM-DD HH:mm:ss,SSS] - INFO - Node X won election, becoming leader
-[YYYY-MM-DD HH:mm:ss,SSS] - INFO - Node X leader state - Time since last heartbeat: Y.YYs
-```
-
-## Error Handling
-
-The system handles:
-
-- Network failures
-- Node crashes
-- Leader changes
-- Split votes
-- Client retries
-- Invalid operations
+See `testcases/` for detailed markdown test scenarios.
 
 ## Future Improvements
 
-1. Add persistence (save state to disk)
-2. Implement snapshotting (compress log)
-3. Add more operation types
-4. Add cluster resizing
-5. Implement log compaction
+- Persistent state storage (disk-based)
+- Log snapshotting and compaction
+- Support for more operation types
+- Cluster resizing and reconfiguration
+- Improved test automation and CI integration
+
+---
+
+**Implementation Authors:**  
+- Python: `node.py`, `raft_node.py`, `client.py`  
+- Node.js: `node.js`  
+- Protocol Buffers: `raft.proto`
+
+---
+
+**License:** MIT
